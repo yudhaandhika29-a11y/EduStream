@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#384635">
+    <title>ATMOSCARE - Smart Air Purifier</title>
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- Chart.js date adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+
+    <!-- Supabase JS v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif']
+                    },
+                    colors: {
+                        earth: {
+                            50: '#f4f6f4',
+                            100: '#eef1ee',
+                            200: '#d5ddd4',
+                            300: '#b0c0ae',
+                            400: '#8ba288',
+                            500: '#6d866a',
+                            600: '#556a52',
+                            700: '#455543',
+                            800: '#384635',
+                            900: '#2f392d'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+
+    <style>
+        :root {
+            --bg: #f4f6f4;
+            --card: #ffffff;
+            --text: #1e293b;
+            --muted: #94a3b8;
+            --primary: #384635;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            transition: background-color .35s ease, color .35s ease;
+        }
+
+        .dark body { background: #0f172a; }
+        .hide-scroll::-webkit-scrollbar { display:none; }
+        .hide-scroll { scrollbar-width:none; -ms-overflow-style:none; }
+
+        .glass {
+            background: rgba(255,255,255,.76);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,.5);
+        }
+        .dark .glass {
+            background: rgba(30,41,59,.80);
+            border-color: rgba(255,255,255,.06);
+        }
+
+        .glass-card {
+            background: #fff;
+            border: 1px solid #eef1ee;
+        }
+        .dark .glass-card {
+            background: rgba(30,41,59,.82);
+            border-color: rgba(255,255,255,.06);
+        }
+
+        .reveal { opacity:0; transform:translateY(22px); transition:opacity .55s ease, transform .55s cubic-bezier(.5,0,0,1); }
+        .reveal.active { opacity:1; transform:translateY(0); }
+
+        .skeleton-wrapper {
+            position:fixed; inset:0; z-index:100;
+            background:#f4f6f4;
+            transition:opacity .45s ease;
+        }
+        .dark .skeleton-wrapper { background:#0f172a; }
+        .skeleton {
+            position:relative; overflow:hidden;
+            background:#e2e8f0; border-radius:1.5rem;
+        }
+        .dark .skeleton { background:#334155; }
+        .skeleton::after {
+            content:""; position:absolute; inset:0;
+            background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
+            animation:shimmer 1.35s infinite;
+        }
+        .dark .skeleton::after { background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent); }
+        @keyframes shimmer { 0%{transform:translateX(-100%)}100%{transform:translateX(100%)} }
+
+        .pulse-dot { animation:pulseDot 1.8s infinite; }
+        @keyframes pulseDot { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.35)} 50%{box-shadow:0 0 0 8px rgba(16,185,129,0)} }
+
+        .gauge-wrap { width:128px; height:128px; position:relative; flex:none; }
+        .gauge-svg { width:100%; height:100%; transform:rotate(-90deg); }
+        .gauge-track { fill:none; stroke:#e5e7eb; stroke-width:10; }
+        .dark .gauge-track { stroke:#334155; }
+        .gauge-value { fill:none; stroke:#384635; stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset .7s ease,stroke .35s ease; }
+        .gauge-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+
+        .status-good { color:#059669; }
+        .status-warning { color:#d97706; }
+        .status-danger { color:#dc2626; }
+        .status-neutral { color:#64748b; }
+
+        .range-input { accent-color:#384635; }
+        .dark .range-input { accent-color:#8ba288; }
+
+        .modal-backdrop { background:rgba(15,23,42,.55); backdrop-filter:blur(4px); }
+
+        .table-scroll { overflow-x:auto; }
+        .table-scroll table { min-width:720px; }
+
+        .chart-wrap { height:320px; }
+        @media (max-width: 768px) { .chart-wrap { height:250px; } }
+
+        .fullscreen-main:fullscreen { padding:1.25rem; background:var(--bg); overflow:auto; }
+        .dark .fullscreen-main:fullscreen { background:#0f172a; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+        }
+    </style>
+</head>
+
+<body class="text-slate-800 dark:text-slate-100 font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- SMART LOADER -->
+    <div id="skeleton-screen" class="skeleton-wrapper p-4 md:p-8 flex flex-col gap-5">
+        <div class="h-16 md:h-20 w-full max-w-7xl mx-auto skeleton"></div>
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-5 max-w-7xl mx-auto w-full flex-1">
+            <div class="xl:col-span-2 skeleton min-h-[250px]"></div>
+            <div class="xl:col-span-3 grid grid-cols-2 gap-5 content-start">
+                <div class="skeleton h-28"></div><div class="skeleton h-28"></div>
+                <div class="skeleton h-28"></div><div class="skeleton h-28"></div>
+                <div class="skeleton h-28 col-span-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="glass shadow-sm px-4 md:px-8 py-3 md:py-4 z-40 sticky top-0">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <button onclick="switchTab('kendali')" class="flex items-center gap-2 md:gap-3 hover:scale-[1.02] transition-transform text-left">
+                <div class="w-10 h-10 md:w-12 md:h-12 bg-earth-800 dark:bg-earth-600 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
+                    <i class="fa-solid fa-leaf md:text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-black text-xl md:text-2xl text-earth-900 dark:text-white tracking-tight leading-none">ATMOSCARE</h1>
+                    <p class="text-[9px] md:text-xs text-slate-400 uppercase tracking-widest mt-1">Smart Air Purifier</p>
+                </div>
+            </button>
+
+            <div class="flex items-center gap-2 md:gap-4">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span id="connection-dot" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                    <div class="leading-tight">
+                        <div id="connection-label" class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Menghubungkan</div>
+                        <div id="connection-detail" class="text-[9px] text-slate-400">Supabase</div>
+                    </div>
+                </div>
+
+                <div class="hidden lg:block text-right leading-tight">
+                    <div class="text-[9px] text-slate-400 uppercase tracking-wider">Data terakhir</div>
+                    <div id="last-update-time" class="text-sm font-extrabold text-earth-700 dark:text-earth-400">--</div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleDarkMode()" id="theme-btn" class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-yellow-400 flex items-center justify-center hover:scale-105 transition-all" title="Tema">
+                        <i id="theme-icon" class="fa-solid fa-moon"></i>
+                    </button>
+                    <button onclick="toggleFullscreen()" class="hidden sm:flex w-10 h-10 md:w-11 md:h-11 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 items-center justify-center hover:scale-105 transition-all" title="Fullscreen">
+                        <i class="fa-solid fa-expand"></i>
+                    </button>
+                    <button onclick="openSettings()" class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 flex items-center justify-center hover:scale-105 transition-all" title="Pengaturan">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <main id="fullscreen-main" class="fullscreen-main flex-1 overflow-y-auto hide-scroll p-4 md:p-8">
+        <div class="max-w-7xl mx-auto">
+
+            <!-- TOP STATUS BAR -->
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-5 reveal">
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1.5 rounded-full bg-earth-100 dark:bg-slate-800 text-earth-800 dark:text-earth-300 text-[10px] md:text-xs font-extrabold uppercase tracking-wider" id="device-id-label">ATMOSCARE-01</span>
+                    <span id="stale-badge" class="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">BELUM ADA DATA</span>
+                </div>
+                <div class="text-[10px] md:text-xs text-slate-400 flex items-center gap-2">
+                    <i class="fa-regular fa-clock"></i>
+                    <span id="local-clock">--:--:--</span>
+                </div>
+            </div>
+
+            <!-- NAV TABS -->
+            <div class="flex items-center gap-2 mb-5 reveal">
+                <button id="nav-kendali" onclick="switchTab('kendali')" class="px-4 py-2.5 rounded-xl bg-earth-800 text-white shadow-md text-xs font-extrabold flex items-center gap-2">
+                    <i class="fa-solid fa-sliders"></i><span>Kendali</span>
+                </button>
+                <button id="nav-monitoring" onclick="switchTab('monitoring')" class="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 text-xs font-extrabold flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line"></i><span>Monitoring</span>
+                </button>
+                <button id="nav-history" onclick="switchTab('history')" class="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 text-xs font-extrabold flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left"></i><span>Riwayat</span>
+                </button>
+            </div>
+
+            <!-- ================= KENDALI ================= -->
+            <section id="tab-kendali" class="block">
+                <div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+
+                    <!-- AIRFLOW -->
+                    <div class="reveal xl:col-span-2 relative min-h-[290px] xl:min-h-[520px] rounded-3xl overflow-hidden shadow-inner border border-earth-200 dark:border-slate-700 bg-gradient-to-b from-earth-100 to-earth-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center">
+                        <canvas id="airflow-canvas" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="relative z-10 flex flex-col items-center px-5 text-center">
+                            <div id="airflow-icon-wrap" class="w-20 h-20 rounded-3xl bg-white/65 dark:bg-slate-900/35 backdrop-blur-md border border-white/60 dark:border-white/10 flex items-center justify-center shadow-lg mb-4">
+                                <i id="airflow-icon" class="fa-solid fa-wind text-earth-700 dark:text-earth-300 text-4xl"></i>
+                            </div>
+                            <div id="canvas-mode-text" class="text-earth-900 dark:text-white font-black text-xl md:text-2xl tracking-wide bg-white/70 dark:bg-slate-900/50 px-5 py-2 rounded-full backdrop-blur-md border border-white/50">OFF • 0%</div>
+                            <div id="airflow-condition" class="mt-3 text-xs md:text-sm font-bold text-earth-800/80 dark:text-slate-200/75">Menunggu data sensor...</div>
+                        </div>
+                    </div>
+
+                    <!-- CONTROL COLUMN -->
+                    <div class="xl:col-span-3 flex flex-col gap-5">
+                        <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm hover:shadow-xl transition-all">
+                            <div class="flex items-center justify-between gap-4">
+                                <div class="flex items-center gap-4">
+                                    <button id="powerBtn" onclick="togglePower()" class="w-16 h-16 rounded-2xl bg-slate-400 dark:bg-slate-600 text-white flex items-center justify-center shadow-md transition-all hover:scale-105 relative">
+                                        <span id="powerRing" class="absolute inset-0 rounded-2xl border-2 border-emerald-400 animate-ping opacity-20 hidden"></span>
+                                        <i class="fa-solid fa-power-off text-2xl relative z-10"></i>
+                                    </button>
+                                    <div>
+                                        <div id="powerStateLabel" class="font-extrabold text-slate-700 dark:text-slate-100">Sistem Purifier Mati</div>
+                                        <div class="flex items-center gap-2 mt-2">
+                                            <span id="powerBadge" class="px-2.5 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 text-[10px] font-black">STANDBY</span>
+                                            <span class="text-[10px] text-slate-400">Relay: <b id="relayText">Nonaktif</b></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right hidden sm:block">
+                                    <div class="text-[9px] uppercase tracking-widest text-slate-400">Data device</div>
+                                    <div id="device-state-time" class="text-xs font-bold text-earth-700 dark:text-earth-300">--</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AIR QUALITY SCORE -->
+                        <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm hover:shadow-xl transition-all">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                                <div>
+                                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-extrabold">Air Quality Score</div>
+                                    <div class="flex items-end gap-2 mt-1">
+                                        <span id="score-value" class="text-5xl font-black tracking-tight">--</span>
+                                        <span class="text-slate-400 font-bold mb-2">/ 100</span>
+                                    </div>
+                                    <div id="score-status" class="mt-1 text-sm font-extrabold status-neutral">Belum tersedia</div>
+                                    <div id="score-description" class="text-[11px] text-slate-400 mt-1">Skor dihitung dari sensor kualitas udara.</div>
+                                </div>
+                                <div class="gauge-wrap mx-auto md:mx-0">
+                                    <svg viewBox="0 0 128 128" class="gauge-svg">
+                                        <circle class="gauge-track" cx="64" cy="64" r="51"></circle>
+                                        <circle id="score-gauge" class="gauge-value" cx="64" cy="64" r="51" stroke-dasharray="320.44" stroke-dashoffset="320.44"></circle>
+                                    </svg>
+                                    <div class="gauge-center">
+                                        <i class="fa-solid fa-shield-heart text-earth-700 dark:text-earth-300 text-xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- MODES -->
+                        <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm hover:shadow-xl transition-all">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-xs md:text-sm font-black text-slate-400 uppercase tracking-wider">Mode Operasi</h3>
+                                <span id="auto-reason-mini" class="text-[10px] text-slate-400 max-w-[55%] text-right truncate">--</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 md:gap-3">
+                                <button id="mode-auto" onclick="setMode('AUTO')" class="mode-btn"> <i class="fa-solid fa-wand-magic-sparkles mb-2"></i><span>AUTO</span></button>
+                                <button id="mode-eco" onclick="setMode('ECO')" class="mode-btn"> <i class="fa-solid fa-leaf mb-2"></i><span>ECO</span></button>
+                                <button id="mode-turbo" onclick="setMode('TURBO')" class="mode-btn"> <i class="fa-solid fa-gauge-high mb-2"></i><span>TURBO</span></button>
+                                <button id="mode-night" onclick="setMode('NIGHT')" class="mode-btn"> <i class="fa-solid fa-moon mb-2"></i><span>NIGHT</span></button>
+                            </div>
+                        </div>
+
+                        <!-- FAN -->
+                        <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm hover:shadow-xl transition-all">
+                            <div class="flex justify-between items-end mb-4">
+                                <div>
+                                    <h3 class="text-xs md:text-sm font-black text-slate-400 uppercase tracking-wider">Kecepatan Kipas</h3>
+                                    <div id="fan-control-mode" class="text-[10px] text-slate-400 mt-1">Mode: AUTO</div>
+                                </div>
+                                <div class="bg-earth-100 dark:bg-slate-700 px-3 md:px-4 py-1.5 rounded-lg text-earth-800 dark:text-earth-300 font-black text-sm" id="fan-speed-val">0%</div>
+                            </div>
+                            <input type="range" id="fan-slider" min="0" max="100" value="0" class="range-input w-full h-2.5 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer" oninput="manualFanSlider(this.value)">
+                            <div class="flex justify-between text-[10px] text-slate-400 mt-2 font-bold"><span>OFF</span><span>50%</span><span>MAX</span></div>
+                        </div>
+
+                        <!-- AUTO REASON -->
+                        <div class="reveal rounded-3xl p-5 bg-earth-50 dark:bg-slate-800 border border-earth-200 dark:border-slate-700">
+                            <div class="flex items-start gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-earth-800 text-white flex items-center justify-center shrink-0"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                                <div>
+                                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-black">AUTO Mode</div>
+                                    <div id="auto-reason-title" class="font-extrabold text-sm mt-1">Menunggu data</div>
+                                    <div id="auto-reason-detail" class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Sistem akan menjelaskan alasan pemilihan kecepatan kipas.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= MONITORING ================= -->
+            <section id="tab-monitoring" class="hidden">
+                <!-- Sensor cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-5">
+                    <div class="reveal sensor-card glass-card p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-xl transition-all" data-metric="aqi">
+                        <div class="flex justify-between items-start"><div class="flex items-center gap-2 text-earth-800 dark:text-earth-400"><i class="fa-solid fa-shield-virus"></i><span class="text-xs font-black">AQI</span></div><button onclick="toggleMiniChart('aqi')" class="text-slate-300 hover:text-earth-600"><i class="fa-solid fa-chart-line"></i></button></div>
+                        <div class="mt-3"><span id="val-aqi" class="text-3xl md:text-4xl font-black">--</span></div>
+                        <div id="status-aqi" class="text-[10px] font-black mt-1">Belum ada data</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Indeks Kualitas Udara</div>
+                        <div id="mini-container-aqi" class="hidden h-14 mt-4"><canvas id="miniChart-aqi"></canvas></div>
+                    </div>
+
+                    <div class="reveal sensor-card glass-card p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-xl transition-all" data-metric="pm25">
+                        <div class="flex justify-between items-start"><div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-smog"></i><span class="text-xs font-black">PM 2.5</span></div><button onclick="toggleMiniChart('pm25')" class="text-slate-300 hover:text-emerald-600"><i class="fa-solid fa-chart-line"></i></button></div>
+                        <div class="mt-3"><span id="val-pm25" class="text-3xl md:text-4xl font-black">--</span><span class="text-sm text-slate-400 ml-1">µg/m³</span></div>
+                        <div id="status-pm25" class="text-[10px] font-black mt-1">Belum ada data</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Partikel Halus</div>
+                        <div id="mini-container-pm25" class="hidden h-14 mt-4"><canvas id="miniChart-pm25"></canvas></div>
+                    </div>
+
+                    <div class="reveal sensor-card glass-card p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-xl transition-all col-span-2 md:col-span-1" data-metric="gas">
+                        <div class="flex justify-between items-start"><div class="flex items-center gap-2 text-amber-600 dark:text-amber-500"><i class="fa-solid fa-cloud"></i><span class="text-xs font-black">Gas (MQ-135)</span></div><button onclick="toggleMiniChart('gas')" class="text-slate-300 hover:text-amber-600"><i class="fa-solid fa-chart-line"></i></button></div>
+                        <div class="mt-3"><span id="val-gas" class="text-3xl md:text-4xl font-black">--</span><span class="text-sm text-slate-400 ml-1">PPM</span></div>
+                        <div id="status-gas" class="text-[10px] font-black mt-1">Belum ada data</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Kandungan Gas</div>
+                        <div id="mini-container-gas" class="hidden h-14 mt-4"><canvas id="miniChart-gas"></canvas></div>
+                    </div>
+
+                    <div class="reveal sensor-card glass-card p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-xl transition-all" data-metric="temp">
+                        <div class="flex justify-between items-start"><div class="flex items-center gap-2 text-rose-500"><i class="fa-solid fa-temperature-half"></i><span class="text-xs font-black">Suhu</span></div><button onclick="toggleMiniChart('temp')" class="text-slate-300 hover:text-rose-500"><i class="fa-solid fa-chart-line"></i></button></div>
+                        <div class="mt-3"><span id="val-temp" class="text-3xl md:text-4xl font-black">--</span><span class="text-sm text-slate-400 ml-1">°C</span></div>
+                        <div id="status-temp" class="text-[10px] font-black mt-1">Belum ada data</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Temperatur Ruang</div>
+                        <div id="mini-container-temp" class="hidden h-14 mt-4"><canvas id="miniChart-temp"></canvas></div>
+                    </div>
+
+                    <div class="reveal sensor-card glass-card p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-xl transition-all" data-metric="humid">
+                        <div class="flex justify-between items-start"><div class="flex items-center gap-2 text-cyan-500"><i class="fa-solid fa-droplet"></i><span class="text-xs font-black">Lembap</span></div><button onclick="toggleMiniChart('humid')" class="text-slate-300 hover:text-cyan-500"><i class="fa-solid fa-chart-line"></i></button></div>
+                        <div class="mt-3"><span id="val-humid" class="text-3xl md:text-4xl font-black">--</span><span class="text-sm text-slate-400 ml-1">%</span></div>
+                        <div id="status-humid" class="text-[10px] font-black mt-1">Belum ada data</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Kelembapan Udara</div>
+                        <div id="mini-container-humid" class="hidden h-14 mt-4"><canvas id="miniChart-humid"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="reveal glass-card p-4 md:p-6 rounded-3xl shadow-sm mt-5">
+                    <div class="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between mb-5">
+                        <div>
+                            <h2 class="font-black text-base md:text-lg">Grafik Historis</h2>
+                            <p id="chart-subtitle" class="text-[10px] md:text-xs text-slate-400 mt-1">Data terbaru dari Supabase</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button class="range-btn" data-range="1m" onclick="changeRange('1m')">1M</button>
+                            <button class="range-btn active" data-range="5m" onclick="changeRange('5m')">5M</button>
+                            <button class="range-btn" data-range="10m" onclick="changeRange('10m')">10M</button>
+                            <button class="range-btn" data-range="1h" onclick="changeRange('1h')">1J</button>
+                            <button class="range-btn" data-range="6h" onclick="changeRange('6h')">6J</button>
+                            <button class="range-btn" data-range="24h" onclick="changeRange('24h')">24J</button>
+                        </div>
+                    </div>
+                    <div id="chart-legend-chips" class="flex flex-wrap gap-2 mb-3"></div>
+                    <div class="chart-wrap relative"><canvas id="multiMetricChart"></canvas></div>
+                </div>
+
+                <!-- Statistics -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+                    <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm">
+                        <div class="flex justify-between items-center mb-4"><h3 class="font-black">Statistik</h3><span id="stats-range-label" class="text-[10px] text-slate-400 font-bold">5 menit</span></div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Min Suhu</div><div id="stat-temp-min" class="text-lg font-black mt-1">--</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Max Suhu</div><div id="stat-temp-max" class="text-lg font-black mt-1">--</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Avg Suhu</div><div id="stat-temp-avg" class="text-lg font-black mt-1">--</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Min PM2.5</div><div id="stat-pm-min" class="text-lg font-black mt-1">--</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Max PM2.5</div><div id="stat-pm-max" class="text-lg font-black mt-1">--</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Avg PM2.5</div><div id="stat-pm-avg" class="text-lg font-black mt-1">--</div></div>
+                        </div>
+                    </div>
+
+                    <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm">
+                        <div class="flex justify-between items-center mb-4"><h3 class="font-black">Status Perangkat</h3><span class="text-[10px] text-slate-400">Real-time</span></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Power</div><div id="monitor-power" class="text-sm font-black mt-1">OFF</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Mode</div><div id="monitor-mode" class="text-sm font-black mt-1">AUTO</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Fan</div><div id="monitor-fan" class="text-sm font-black mt-1">0%</div></div>
+                            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="text-[9px] uppercase font-bold text-slate-400">Device</div><div id="monitor-device" class="text-sm font-black mt-1 truncate">--</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= RIWAYAT ================= -->
+            <section id="tab-history" class="hidden">
+                <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm">
+                    <div class="flex flex-col md:flex-row gap-4 md:items-center md:justify-between mb-5">
+                        <div><h2 class="font-black text-lg">Riwayat Sensor</h2><p class="text-[10px] text-slate-400 mt-1">Riwayat pembacaan yang tersimpan di Supabase.</p></div>
+                        <div class="flex gap-2">
+                            <button onclick="exportCSV()" class="px-3 py-2 rounded-xl bg-earth-800 text-white text-xs font-extrabold flex items-center gap-2 hover:opacity-90"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+                            <button onclick="exportJSON()" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold flex items-center gap-2"><i class="fa-solid fa-file-code"></i> JSON</button>
+                        </div>
+                    </div>
+                    <div class="table-scroll rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50 dark:bg-slate-800"><tr class="text-[10px] uppercase tracking-wider text-slate-400"><th class="px-4 py-3">Waktu</th><th class="px-4 py-3">AQI</th><th class="px-4 py-3">PM2.5</th><th class="px-4 py-3">Gas</th><th class="px-4 py-3">Suhu</th><th class="px-4 py-3">Kelembapan</th></tr></thead>
+                            <tbody id="history-table-body" class="divide-y divide-slate-100 dark:divide-slate-700"><tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">Memuat data...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="reveal glass-card p-5 md:p-6 rounded-3xl shadow-sm mt-5">
+                    <div class="flex items-center justify-between mb-4"><div><h3 class="font-black">Event Sistem</h3><p class="text-[10px] text-slate-400 mt-1">Alarm, perubahan mode, dan kejadian koneksi.</p></div><button onclick="loadHistory()" class="text-xs font-bold text-earth-700 dark:text-earth-300"><i class="fa-solid fa-rotate"></i> Muat ulang</button></div>
+                    <div id="events-list" class="space-y-2"><div class="text-center py-6 text-slate-400 text-xs">Memuat event...</div></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- TOAST -->
+    <div id="toast-container" class="fixed top-24 left-1/2 -translate-x-1/2 z-[90] flex flex-col gap-2 w-max max-w-[92vw] pointer-events-none"></div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-[80] modal-backdrop items-center justify-center p-4">
+        <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto glass-card rounded-3xl shadow-2xl">
+            <div class="sticky top-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-700 px-5 py-4 flex items-center justify-between z-10">
+                <div><h2 class="font-black text-lg">Pengaturan ATMOSCARE</h2><p class="text-[10px] text-slate-400">Threshold dan konfigurasi perangkat.</p></div>
+                <button onclick="closeSettings()" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 space-y-6">
+                <div>
+                    <div class="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-3">Identitas</div>
+                    <label class="text-xs font-bold text-slate-500">Device ID</label>
+                    <input id="settings-device-id" class="settings-input mt-2" value="ATMOSCARE-01" readonly>
+                </div>
+
+                <div>
+                    <div class="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-3">Threshold Kualitas Udara</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div><label class="text-[10px] font-bold text-slate-400">PM2.5 Warning</label><input id="set-pm25-warning" type="number" step="0.1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">PM2.5 Danger</label><input id="set-pm25-danger" type="number" step="0.1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">AQI Warning</label><input id="set-aqi-warning" type="number" step="1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">AQI Danger</label><input id="set-aqi-danger" type="number" step="1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">Gas Warning</label><input id="set-gas-warning" type="number" step="0.1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">Gas Danger</label><input id="set-gas-danger" type="number" step="0.1" class="settings-input mt-1"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-3">Threshold Lingkungan</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div><label class="text-[10px] font-bold text-slate-400">Suhu Minimum (°C)</label><input id="set-temp-min" type="number" step="0.1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">Suhu Maksimum (°C)</label><input id="set-temp-max" type="number" step="0.1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">Kelembapan Minimum (%)</label><input id="set-humid-min" type="number" step="0.1" class="settings-input mt-1"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400">Kelembapan Maksimum (%)</label><input id="set-humid-max" type="number" step="0.1" class="settings-input mt-1"></div>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-[10px] text-amber-800 dark:text-amber-300">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                    Pastikan tabel Supabase memiliki Row Level Security (RLS) dan policy yang sesuai. Jangan gunakan service_role key di browser.
+                </div>
+            </div>
+            <div class="sticky bottom-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-t border-slate-100 dark:border-slate-700 px-5 py-4 flex justify-end gap-2">
+                <button onclick="closeSettings()" class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold">Batal</button>
+                <button onclick="saveSettings()" class="px-4 py-2.5 rounded-xl bg-earth-800 text-white text-xs font-extrabold">Simpan Pengaturan</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .mode-btn {
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            padding:.9rem .5rem; border-radius:1rem;
+            border:1px solid #eef1ee; color:#475569; background:transparent;
+            font-size:10px; font-weight:800; transition:all .25s ease;
+        }
+        .dark .mode-btn { border-color:#475569; color:#cbd5e1; }
+        .mode-btn:hover { transform:translateY(-2px); background:#eef1ee; box-shadow:0 5px 16px rgba(0,0,0,.06); }
+        .dark .mode-btn:hover { background:#334155; }
+        .mode-btn.active { background:#384635; color:#fff; border-color:#384635; box-shadow:0 8px 20px rgba(56,70,53,.22); }
+        .dark .mode-btn.active { background:#556a52; border-color:#556a52; }
+
+        .range-btn { padding:.45rem .7rem; border-radius:.7rem; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:900; }
+        .dark .range-btn { background:#334155; color:#cbd5e1; }
+        .range-btn.active { background:#384635; color:#fff; }
+
+        .settings-input {
+            width:100%; border:1px solid #dce4dd; background:#fff; color:#334155;
+            padding:.65rem .75rem; border-radius:.8rem; outline:none; font-size:.8rem; font-weight:700;
+        }
+        .dark .settings-input { border-color:#475569; background:#0f172a; color:#e2e8f0; }
+        .settings-input:focus { border-color:#6d866a; box-shadow:0 0 0 3px rgba(109,134,106,.15); }
+    </style>
+
+    <script>
+        /* ==========================================================
+           ATMOSCARE + SUPABASE
+           ==========================================================
+           Koneksi Supabase sudah dikonfigurasi untuk ATMOSCARE-01.
+
+           Struktur tabel yang diharapkan:
+           sensor_readings:
+             id, device_id, recorded_at, aqi, pm25, gas_ppm,
+             temperature_c, humidity_pct
+
+           device_state:
+             device_id, power, mode, fan_speed, updated_at
+
+           device_settings:
+             device_id, pm25_warning, pm25_danger, aqi_warning,
+             aqi_danger, gas_warning, gas_danger, temp_min,
+             temp_max, humidity_min, humidity_max, updated_at
+
+           system_events:
+             id, device_id, event_type, severity, message, created_at
+        ========================================================== */
+
+        const SUPABASE_URL = 'https://lxcrgjkcrosunqobaqku.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4Y3Jnamtjcm9zdW5xb2JhcWt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNzc0NjIsImV4cCI6MjEwNTg1MzQ2Mn0.5wNCr7raAR3x8iFDPExrJJpizOxfap-lVhNpjevNYHw';
+        const DEVICE_ID = 'ATMOSCARE-01';
+
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const DEFAULT_SETTINGS = {
+            pm25_warning: 25,
+            pm25_danger: 55,
+            aqi_warning: 50,
+            aqi_danger: 100,
+            gas_warning: 200,
+            gas_danger: 400,
+            temp_min: 18,
+            temp_max: 30,
+            humidity_min: 40,
+            humidity_max: 70
+        };
+
+        const state = {
+            deviceId: DEVICE_ID,
+            power: false,
+            mode: 'AUTO',
+            fanSpeed: 0,
+            telemetry: { aqi: null, pm25: null, gas: null, temp: null, humid: null },
+            settings: { ...DEFAULT_SETTINGS },
+            history: [],
+            events: [],
+            range: '5m',
+            lastSensorAt: null,
+            lastStateAt: null,
+            realtimeReady: false,
+            firstDataReceived: false,
+            darkMode: localStorage.getItem('atmoscare-dark') === '1',
+            metricsVisible: { aqi:true, pm25:true, gas:true, temp:true, humid:true }
+        };
+
+        let chartInstance = null;
+        const miniCharts = {};
+        let realtimeChannels = [];
+        let autoAlertState = {};
+        let revealObserver = null;
+
+        const RANGE_MS = {
+            '1m': 60 * 1000,
+            '5m': 5 * 60 * 1000,
+            '10m': 10 * 60 * 1000,
+            '1h': 60 * 60 * 1000,
+            '6h': 6 * 60 * 60 * 1000,
+            '24h': 24 * 60 * 60 * 1000
+        };
+
+        const RANGE_LABELS = { '1m':'1 menit','5m':'5 menit','10m':'10 menit','1h':'1 jam','6h':'6 jam','24h':'24 jam' };
+
+        const metricConfig = {
+            aqi:  { label:'AQI', color:'#384635', unit:'' },
+            pm25: { label:'PM 2.5', color:'#10b981', unit:' µg/m³' },
+            gas:  { label:'Gas (PPM)', color:'#d97706', unit:' PPM' },
+            temp: { label:'Suhu (°C)', color:'#ef4444', unit:' °C' },
+            humid:{ label:'Lembap (%)', color:'#06b6d4', unit:' %' }
+        };
+
+        document.addEventListener('DOMContentLoaded', initApp);
+
+        async function initApp() {
+            applyDarkMode();
+            setupReveal();
+            initAirflowCanvas();
+            initCharts();
+            updateClock();
+            setInterval(updateClock, 1000);
+            updateDeviceIdUI();
+
+            try {
+                await bootstrapData();
+                subscribeRealtime();
+                setConnection('online', 'ONLINE', 'Supabase Realtime');
+            } catch (error) {
+                console.error(error);
+                setConnection('offline', 'OFFLINE', 'Gagal memuat data');
+                showToast('Tidak dapat mengambil data dari Supabase.', 'warning', 6000);
+            } finally {
+                hideSkeleton();
+                triggerReveal();
+            }
+
+            window.addEventListener('online', () => setConnection('online', 'ONLINE', 'Browser online'));
+            window.addEventListener('offline', () => setConnection('offline', 'OFFLINE', 'Browser offline'));
+            document.addEventListener('fullscreenchange', updateFullscreenIcon);
+        }
+
+        async function bootstrapData() {
+            updateLoadingText('Memuat pengaturan...');
+            await loadSettings();
+            updateLoadingText('Memuat status perangkat...');
+            await loadDeviceState();
+            updateLoadingText('Memuat histori sensor...');
+            await loadHistory();
+            renderAll();
+            state.firstDataReceived = state.history.length > 0;
+        }
+
+        function updateLoadingText(text) {
+            // Hook sengaja sederhana; loader tetap ringan.
+            const skeleton = document.getElementById('skeleton-screen');
+            if (skeleton) skeleton.setAttribute('aria-label', text);
+        }
+
+        function hideSkeleton() {
+            const skel = document.getElementById('skeleton-screen');
+            if (!skel) return;
+            skel.style.opacity = '0';
+            setTimeout(() => { skel.style.display = 'none'; triggerReveal(); }, 450);
+        }
+
+        function setConnection(type, label, detail) {
+            const dot = document.getElementById('connection-dot');
+            const labelEl = document.getElementById('connection-label');
+            const detailEl = document.getElementById('connection-detail');
+            const staleBadge = document.getElementById('stale-badge');
+            if (!dot) return;
+
+            const map = {
+                online: { dot:'bg-emerald-500 pulse-dot', text:'text-emerald-600 dark:text-emerald-400', badge:'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' },
+                stale: { dot:'bg-amber-500', text:'text-amber-600 dark:text-amber-400', badge:'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800' },
+                offline: { dot:'bg-red-500', text:'text-red-600 dark:text-red-400', badge:'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800' }
+            };
+            const cfg = map[type] || map.offline;
+            dot.className = 'w-2.5 h-2.5 rounded-full ' + cfg.dot;
+            labelEl.className = 'text-[10px] font-extrabold uppercase tracking-wider ' + cfg.text;
+            labelEl.textContent = label;
+            detailEl.textContent = detail;
+            if (staleBadge) {
+                staleBadge.className = 'px-3 py-1.5 rounded-full border text-[10px] font-extrabold uppercase tracking-wider ' + cfg.badge;
+                staleBadge.textContent = label === 'ONLINE' ? 'DATA NORMAL' : label.toUpperCase();
+            }
+        }
+
+        function calculateStaleState() {
+            if (!state.lastSensorAt) return 'offline';
+            const age = Date.now() - new Date(state.lastSensorAt).getTime();
+            if (age <= 5000) return 'online';
+            if (age <= 15000) return 'stale';
+            return 'offline';
+        }
+
+        setInterval(() => {
+            if (!state.lastSensorAt) return;
+            const status = calculateStaleState();
+            const age = Math.max(0, Date.now() - new Date(state.lastSensorAt).getTime());
+            if (status === 'online') setConnection('online', 'ONLINE', `${formatAge(age)} lalu`);
+            else if (status === 'stale') setConnection('stale', 'DATA LAMBAT', `${formatAge(age)} lalu`);
+            else setConnection('offline', 'OFFLINE', `Tidak ada data ${formatAge(age)}`);
+        }, 1000);
+
+        function formatAge(ms) {
+            const sec = Math.floor(ms / 1000);
+            if (sec < 60) return `${sec} detik`;
+            const min = Math.floor(sec / 60);
+            return `${min} menit`;
+        }
+
+        async function loadSettings() {
+            const { data, error } = await supabaseClient
+                .from('device_settings')
+                .select('*')
+                .eq('device_id', state.deviceId)
+                .maybeSingle();
+            if (error) throw error;
+            if (data) {
+                state.settings = {
+                    pm25_warning: numOr(data.pm25_warning, DEFAULT_SETTINGS.pm25_warning),
+                    pm25_danger: numOr(data.pm25_danger, DEFAULT_SETTINGS.pm25_danger),
+                    aqi_warning: numOr(data.aqi_warning, DEFAULT_SETTINGS.aqi_warning),
+                    aqi_danger: numOr(data.aqi_danger, DEFAULT_SETTINGS.aqi_danger),
+                    gas_warning: numOr(data.gas_warning, DEFAULT_SETTINGS.gas_warning),
+                    gas_danger: numOr(data.gas_danger, DEFAULT_SETTINGS.gas_danger),
+                    temp_min: numOr(data.temp_min, DEFAULT_SETTINGS.temp_min),
+                    temp_max: numOr(data.temp_max, DEFAULT_SETTINGS.temp_max),
+                    humidity_min: numOr(data.humidity_min, DEFAULT_SETTINGS.humidity_min),
+                    humidity_max: numOr(data.humidity_max, DEFAULT_SETTINGS.humidity_max)
+                };
+            }
+        }
+
+        async function loadDeviceState() {
+            const { data, error } = await supabaseClient
+                .from('device_state')
+                .select('*')
+                .eq('device_id', state.deviceId)
+                .maybeSingle();
+            if (error) throw error;
+            if (data) applyDeviceState(data, false);
+        }
+
+        async function loadHistory() {
+            if (!supabaseClient) return;
+            const start = new Date(Date.now() - RANGE_MS[state.range]).toISOString();
+            const pageSize = 1000;
+            const maxRows = 50000;
+            const allRows = [];
+            for (let offset = 0; offset < maxRows; offset += pageSize) {
+                const { data, error } = await supabaseClient
+                    .from('sensor_readings')
+                    .select('id, device_id, recorded_at, aqi, pm25, gas_ppm, temperature_c, humidity_pct')
+                    .eq('device_id', state.deviceId)
+                    .gte('recorded_at', start)
+                    .order('recorded_at', { ascending: true })
+                    .range(offset, offset + pageSize - 1);
+                if (error) throw error;
+                allRows.push(...(data || []));
+                if (!data || data.length < pageSize) break;
+            }
+            state.history = allRows.map(normalizeReading);
+            if (state.history.length) {
+                state.lastSensorAt = state.history[state.history.length - 1].recorded_at;
+                applyTelemetry(state.history[state.history.length - 1]);
+            }
+            renderChart();
+            renderStatistics();
+            renderHistoryTable();
+            await loadEvents();
+        }
+
+        async function loadEvents() {
+            if (!supabaseClient) return;
+            const { data, error } = await supabaseClient
+                .from('system_events')
+                .select('id, device_id, event_type, severity, message, created_at')
+                .eq('device_id', state.deviceId)
+                .order('created_at', { ascending: false })
+                .limit(30);
+            if (error) {
+                console.warn('system_events:', error.message);
+                state.events = [];
+                renderEvents();
+                return;
+            }
+            state.events = data || [];
+            renderEvents();
+        }
+
+        function subscribeRealtime() {
+            cleanupRealtime();
+
+            const sensorChannel = supabaseClient.channel(`sensor-${state.deviceId}`)
+                .on('postgres_changes', { event:'INSERT', schema:'public', table:'sensor_readings', filter:`device_id=eq.${state.deviceId}` }, payload => {
+                    handleRealtimeSensor(payload.new);
+                })
+                .on('postgres_changes', { event:'UPDATE', schema:'public', table:'sensor_readings', filter:`device_id=eq.${state.deviceId}` }, payload => {
+                    handleRealtimeSensor(payload.new);
+                })
+                .subscribe(status => {
+                    if (status === 'SUBSCRIBED') state.realtimeReady = true;
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setConnection('offline', 'REALTIME ERROR', status);
+                });
+
+            const stateChannel = supabaseClient.channel(`device-state-${state.deviceId}`)
+                .on('postgres_changes', { event:'UPDATE', schema:'public', table:'device_state', filter:`device_id=eq.${state.deviceId}` }, payload => {
+                    applyDeviceState(payload.new, true);
+                })
+                .on('postgres_changes', { event:'INSERT', schema:'public', table:'device_state', filter:`device_id=eq.${state.deviceId}` }, payload => {
+                    applyDeviceState(payload.new, true);
+                })
+                .subscribe();
+
+            const settingsChannel = supabaseClient.channel(`settings-${state.deviceId}`)
+                .on('postgres_changes', { event:'UPDATE', schema:'public', table:'device_settings', filter:`device_id=eq.${state.deviceId}` }, payload => {
+                    applySettings(payload.new);
+                    showToast('Pengaturan diperbarui dari database.', 'info');
+                })
+                .subscribe();
+
+            const eventChannel = supabaseClient.channel(`events-${state.deviceId}`)
+                .on('postgres_changes', { event:'INSERT', schema:'public', table:'system_events', filter:`device_id=eq.${state.deviceId}` }, payload => {
+                    state.events.unshift(payload.new);
+                    state.events = state.events.slice(0, 30);
+                    renderEvents();
+                })
+                .subscribe();
+
+            realtimeChannels = [sensorChannel, stateChannel, settingsChannel, eventChannel];
+        }
+
+        function cleanupRealtime() {
+            if (!supabaseClient) return;
+            realtimeChannels.forEach(ch => supabaseClient.removeChannel(ch));
+            realtimeChannels = [];
+        }
+
+        function handleRealtimeSensor(raw) {
+            const reading = normalizeReading(raw);
+            if (!reading.recorded_at) return;
+
+            const idx = state.history.findIndex(x => x.id && reading.id && x.id === reading.id);
+            if (idx >= 0) state.history[idx] = reading;
+            else state.history.push(reading);
+
+            state.history.sort((a,b) => new Date(a.recorded_at) - new Date(b.recorded_at));
+            // Sisakan lebih banyak data lokal untuk statistik/chart saat menerima realtime.
+            if (state.history.length > 5000) state.history.splice(0, state.history.length - 5000);
+
+            state.lastSensorAt = reading.recorded_at;
+            applyTelemetry(reading);
+            state.firstDataReceived = true;
+
+            renderSensorUI();
+            renderChart();
+            renderStatistics();
+            renderHistoryTable();
+            checkAlerts(reading);
+            updateScore();
+        }
+
+        function normalizeReading(r) {
+            return {
+                id: r.id ?? null,
+                device_id: r.device_id ?? state.deviceId,
+                recorded_at: r.recorded_at ?? null,
+                aqi: numOrNull(r.aqi),
+                pm25: numOrNull(r.pm25),
+                gas: numOrNull(r.gas_ppm ?? r.gas ?? r.mq135),
+                temp: numOrNull(r.temperature_c ?? r.temperature ?? r.temp),
+                humid: numOrNull(r.humidity_pct ?? r.humidity ?? r.humid)
+            };
+        }
+
+        function applyTelemetry(reading) {
+            state.telemetry = { aqi:reading.aqi, pm25:reading.pm25, gas:reading.gas, temp:reading.temp, humid:reading.humid };
+            renderSensorUI();
+            updateScore();
+            updateAutoReason();
+        }
+
+        function applyDeviceState(data, notify) {
+            state.power = Boolean(data.power);
+            state.mode = String(data.mode || 'AUTO').toUpperCase();
+            state.fanSpeed = clamp(parseInt(data.fan_speed ?? 0, 10) || 0, 0, 100);
+            state.lastStateAt = data.updated_at || new Date().toISOString();
+            renderControlUI();
+            if (notify) showToast(`Status perangkat: ${state.mode} ${state.power ? 'aktif' : 'nonaktif'}.`, 'info');
+        }
+
+        function applySettings(data) {
+            state.settings = {
+                pm25_warning: numOr(data.pm25_warning, state.settings.pm25_warning),
+                pm25_danger: numOr(data.pm25_danger, state.settings.pm25_danger),
+                aqi_warning: numOr(data.aqi_warning, state.settings.aqi_warning),
+                aqi_danger: numOr(data.aqi_danger, state.settings.aqi_danger),
+                gas_warning: numOr(data.gas_warning, state.settings.gas_warning),
+                gas_danger: numOr(data.gas_danger, state.settings.gas_danger),
+                temp_min: numOr(data.temp_min, state.settings.temp_min),
+                temp_max: numOr(data.temp_max, state.settings.temp_max),
+                humidity_min: numOr(data.humidity_min, state.settings.humidity_min),
+                humidity_max: numOr(data.humidity_max, state.settings.humidity_max)
+            };
+            fillSettingsForm();
+            renderSensorUI();
+        }
+
+        function renderAll() {
+            updateDeviceIdUI();
+            renderControlUI();
+            renderSensorUI();
+            renderChart();
+            renderStatistics();
+            renderHistoryTable();
+            renderEvents();
+            updateScore();
+            updateAutoReason();
+        }
+
+        function seedEmptyUI() {
+            renderControlUI();
+            renderSensorUI();
+            renderChart();
+            renderStatistics();
+            renderHistoryTable();
+            renderEvents();
+        }
+
+        function renderSensorUI() {
+            setText('val-aqi', formatValue(state.telemetry.aqi, 0));
+            setText('val-pm25', formatValue(state.telemetry.pm25, 1));
+            setText('val-gas', formatValue(state.telemetry.gas, 0));
+            setText('val-temp', formatValue(state.telemetry.temp, 1));
+            setText('val-humid', formatValue(state.telemetry.humid, 0));
+
+            const statuses = {
+                aqi: evaluate('aqi', state.telemetry.aqi),
+                pm25: evaluate('pm25', state.telemetry.pm25),
+                gas: evaluate('gas', state.telemetry.gas),
+                temp: evaluate('temp', state.telemetry.temp),
+                humid: evaluate('humid', state.telemetry.humid)
+            };
+            Object.entries(statuses).forEach(([key,s]) => {
+                const el = document.getElementById(`status-${key}`);
+                if (el) { el.textContent = s.label; el.className = `text-[10px] font-black mt-1 ${s.className}`; }
+                const valueEl = document.getElementById(`val-${key}`);
+                if (valueEl) valueEl.className = `text-3xl md:text-4xl font-black ${s.className}`;
+            });
+
+            if (state.lastSensorAt) {
+                const t = formatDateTime(state.lastSensorAt);
+                setText('last-update-time', t.time);
+                setText('device-state-time', state.lastStateAt ? formatDateTime(state.lastStateAt).time : '--');
+            }
+        }
+
+        function renderControlUI() {
+            const on = state.power;
+            const powerBtn = document.getElementById('powerBtn');
+            const ring = document.getElementById('powerRing');
+            const badge = document.getElementById('powerBadge');
+            const label = document.getElementById('powerStateLabel');
+            const relay = document.getElementById('relayText');
+            const slider = document.getElementById('fan-slider');
+
+            if (powerBtn) powerBtn.className = `w-16 h-16 rounded-2xl ${on ? 'bg-earth-800 dark:bg-emerald-600' : 'bg-slate-400 dark:bg-slate-600'} text-white flex items-center justify-center shadow-${on?'lg':'md'} transition-all hover:scale-105 relative`;
+            if (ring) ring.classList.toggle('hidden', !on);
+            if (badge) { badge.textContent = on ? 'AKTIF' : 'STANDBY'; badge.className = `px-2.5 py-1 rounded-full text-[10px] font-black border ${on ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600'}`; }
+            if (label) label.textContent = on ? 'Sistem Purifier Menyala' : 'Sistem Purifier Mati';
+            if (relay) { relay.textContent = on ? 'Aktif' : 'Nonaktif'; relay.className = on ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'font-bold text-slate-400'; }
+            if (slider) slider.value = on ? state.fanSpeed : 0;
+            setText('fan-speed-val', `${on ? state.fanSpeed : 0}%`);
+            setText('fan-control-mode', `Mode: ${state.mode}`);
+            setText('monitor-power', on ? 'ON' : 'OFF');
+            setText('monitor-mode', state.mode);
+            setText('monitor-fan', `${on ? state.fanSpeed : 0}%`);
+            setText('monitor-device', state.deviceId);
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            const activeMode = document.getElementById(`mode-${state.mode.toLowerCase()}`);
+            if (activeMode && on) activeMode.classList.add('active');
+            setText('canvas-mode-text', on ? `${state.mode} • ${state.fanSpeed}%` : 'OFF • 0%');
+        }
+
+        function renderChart() {
+            if (!chartInstance) return;
+            const cutoff = Date.now() - RANGE_MS[state.range];
+            const rows = state.history.filter(x => x.recorded_at && new Date(x.recorded_at).getTime() >= cutoff);
+            const labels = rows.map(x => new Date(x.recorded_at));
+
+            chartInstance.data.labels = labels;
+            chartInstance.data.datasets.forEach(ds => {
+                const key = ds._metricKey;
+                ds.data = rows.map(x => x[key]);
+            });
+            chartInstance.options.scales.x.min = cutoff;
+            chartInstance.options.scales.x.max = Date.now();
+            chartInstance.update('none');
+            renderLegend();
+            updateMiniCharts(rows);
+            renderStatistics(rows);
+            setText('chart-subtitle', `${rows.length} pembacaan • ${RANGE_LABELS[state.range]}`);
+            setText('stats-range-label', RANGE_LABELS[state.range]);
+        }
+
+        function initCharts() {
+            const ctx = document.getElementById('multiMetricChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type:'line',
+                data:{
+                    labels:[],
+                    datasets:[
+                        makeDataset('aqi'), makeDataset('pm25'), makeDataset('gas'), makeDataset('temp'), makeDataset('humid')
+                    ]
+                },
+                options:{
+                    responsive:true,
+                    maintainAspectRatio:false,
+                    interaction:{mode:'index', intersect:false},
+                    plugins:{
+                        legend:{display:false},
+                        tooltip:{
+                            backgroundColor:'rgba(15,23,42,.92)',
+                            titleFont:{family:'Plus Jakarta Sans',weight:'700'},
+                            bodyFont:{family:'Plus Jakarta Sans'},
+                            callbacks:{
+                                title: items => items.length ? formatDateTime(items[0].parsed.x).full : '',
+                                label: context => {
+                                    const ds = context.dataset;
+                                    const value = context.parsed.y;
+                                    return ` ${ds.label}: ${value == null ? '--' : value}${ds._unit}`;
+                                }
+                            }
+                        }
+                    },
+                    scales:{
+                        x:{
+                            type:'time',
+                            time:{tooltipFormat:'dd MMM yyyy HH:mm:ss', displayFormats:{second:'HH:mm:ss', minute:'HH:mm', hour:'HH:mm'}},
+                            grid:{display:false},
+                            ticks:{font:{family:'Plus Jakarta Sans',size:9},color:'#94a3b8',maxTicksLimit:8}
+                        },
+                        y:{
+                            grid:{color:'#eef2f7'},
+                            ticks:{font:{family:'Plus Jakarta Sans',size:9},color:'#94a3b8'}
+                        }
+                    }
+                }
+            });
+
+            Object.keys(metricConfig).forEach(key => {
+                const ctxMini = document.getElementById(`miniChart-${key}`)?.getContext('2d');
+                if (!ctxMini) return;
+                miniCharts[key] = new Chart(ctxMini, {
+                    type:'line',
+                    data:{labels:[],datasets:[{data:[],borderColor:metricConfig[key].color,borderWidth:2,tension:.35,pointRadius:0,fill:false}]},
+                    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}
+                });
+            });
+        }
+
+        function makeDataset(key) {
+            const c = metricConfig[key];
+            return { _metricKey:key, _unit:c.unit, label:c.label, data:[], borderColor:c.color, backgroundColor:c.color+'12', borderWidth:2, tension:.34, pointRadius:0, pointHoverRadius:4, spanGaps:true, hidden:false };
+        }
+
+        function updateMiniCharts(rows) {
+            Object.keys(miniCharts).forEach(key => {
+                const ch = miniCharts[key];
+                if (!ch) return;
+                ch.data.labels = rows.map(x => new Date(x.recorded_at));
+                ch.data.datasets[0].data = rows.map(x => x[key]);
+                ch.update('none');
+            });
+        }
+
+        function renderLegend() {
+            const container = document.getElementById('chart-legend-chips');
+            if (!container || !chartInstance) return;
+            container.innerHTML = '';
+            Object.keys(metricConfig).forEach((key, index) => {
+                const ds = chartInstance.data.datasets[index];
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `px-3 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-2 transition-all ${state.metricsVisible[key] ? 'text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 line-through'}`;
+                btn.style.backgroundColor = state.metricsVisible[key] ? metricConfig[key].color : '';
+                btn.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${state.metricsVisible[key] ? 'bg-white' : 'bg-slate-400'}"></span>${metricConfig[key].label}`;
+                btn.onclick = () => {
+                    state.metricsVisible[key] = !state.metricsVisible[key];
+                    ds.hidden = !state.metricsVisible[key];
+                    chartInstance.update();
+                    renderLegend();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderStatistics(rows = null) {
+            if (!rows) {
+                const cutoff = Date.now() - RANGE_MS[state.range];
+                rows = state.history.filter(x => x.recorded_at && new Date(x.recorded_at).getTime() >= cutoff);
+            }
+            const temp = stats(rows.map(x=>x.temp));
+            const pm = stats(rows.map(x=>x.pm25));
+            setText('stat-temp-min', temp.min == null ? '--' : `${temp.min.toFixed(1)} °C`);
+            setText('stat-temp-max', temp.max == null ? '--' : `${temp.max.toFixed(1)} °C`);
+            setText('stat-temp-avg', temp.avg == null ? '--' : `${temp.avg.toFixed(1)} °C`);
+            setText('stat-pm-min', pm.min == null ? '--' : pm.min.toFixed(1));
+            setText('stat-pm-max', pm.max == null ? '--' : pm.max.toFixed(1));
+            setText('stat-pm-avg', pm.avg == null ? '--' : pm.avg.toFixed(1));
+        }
+
+        function stats(values) {
+            const v = values.filter(Number.isFinite);
+            if (!v.length) return {min:null,max:null,avg:null};
+            return { min:Math.min(...v), max:Math.max(...v), avg:v.reduce((a,b)=>a+b,0)/v.length };
+        }
+
+        function renderHistoryTable() {
+            const body = document.getElementById('history-table-body');
+            if (!body) return;
+            const rows = [...state.history].sort((a,b) => new Date(b.recorded_at)-new Date(a.recorded_at)).slice(0, 100);
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">Belum ada data sensor.</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map(r => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td class="px-4 py-3 font-bold">${escapeHtml(formatDateTime(r.recorded_at).full)}</td>
+                    <td class="px-4 py-3">${formatValue(r.aqi,0)}</td>
+                    <td class="px-4 py-3">${formatValue(r.pm25,1)}</td>
+                    <td class="px-4 py-3">${formatValue(r.gas,0)}</td>
+                    <td class="px-4 py-3">${formatValue(r.temp,1)} °C</td>
+                    <td class="px-4 py-3">${formatValue(r.humid,0)} %</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderEvents() {
+            const list = document.getElementById('events-list');
+            if (!list) return;
+            if (!state.events.length) { list.innerHTML = '<div class="text-center py-6 text-slate-400 text-xs">Belum ada event sistem.</div>'; return; }
+            list.innerHTML = state.events.slice(0,30).map(e => {
+                const sev = String(e.severity || 'INFO').toUpperCase();
+                const icon = sev === 'DANGER' ? 'fa-circle-exclamation text-red-500' : sev === 'WARNING' ? 'fa-triangle-exclamation text-amber-500' : 'fa-circle-info text-blue-500';
+                return `<div class="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div class="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center"><i class="fa-solid ${icon}"></i></div><div class="flex-1"><div class="flex justify-between gap-3"><div class="text-xs font-extrabold">${escapeHtml(e.event_type || 'EVENT')}</div><div class="text-[9px] text-slate-400">${formatDateTime(e.created_at).full}</div></div><div class="text-[10px] text-slate-500 dark:text-slate-400 mt-1">${escapeHtml(e.message || '')}</div></div></div>`;
+            }).join('');
+        }
+
+        function changeRange(range) {
+            if (!RANGE_MS[range]) return;
+            state.range = range;
+            document.querySelectorAll('.range-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.range === range));
+            loadHistory().catch(err => { console.error(err); showToast('Gagal memuat rentang data.', 'warning'); });
+        }
+
+        async function togglePower() {
+            const next = !state.power;
+            await updateDeviceState({ power: next, mode: next ? state.mode : state.mode, fan_speed: next ? state.fanSpeed : 0 });
+        }
+
+        async function setMode(mode) {
+            let speed = state.fanSpeed;
+            if (mode === 'ECO') speed = 30;
+            if (mode === 'TURBO') speed = 100;
+            if (mode === 'NIGHT') speed = 15;
+            if (mode === 'AUTO') speed = autoFanDecision();
+            await updateDeviceState({ power:true, mode, fan_speed:speed });
+        }
+
+        async function manualFanSlider(value) {
+            const fanSpeed = clamp(parseInt(value,10)||0,0,100);
+            state.fanSpeed = fanSpeed;
+            state.mode = 'CUSTOM';
+            renderControlUI();
+            try {
+                await updateDeviceState({ power:true, mode:'CUSTOM', fan_speed:fanSpeed });
+            } catch(e) {
+                showToast('Gagal mengubah kecepatan kipas.', 'warning');
+            }
+        }
+
+        async function updateDeviceState(patch) {
+            if (!supabaseClient) { showToast('Supabase belum dikonfigurasi.', 'warning'); return; }
+            // Update UI optimistik agar tombol terasa responsif.
+            state.power = patch.power ?? state.power;
+            state.mode = patch.mode ?? state.mode;
+            state.fanSpeed = patch.fan_speed ?? state.fanSpeed;
+            renderControlUI();
+
+            const row = {
+                device_id: state.deviceId,
+                power: Boolean(state.power),
+                mode: state.mode,
+                fan_speed: Number(state.fanSpeed),
+                updated_at: new Date().toISOString()
+            };
+            const { error } = await supabaseClient.from('device_state').upsert(row, { onConflict:'device_id' });
+            if (error) {
+                console.error(error);
+                showToast('Perintah gagal disimpan ke Supabase.', 'warning');
+                await loadDeviceState().catch(()=>{});
+                return;
+            }
+            showToast(state.power ? `Sistem ${state.mode} aktif.` : 'Sistem dimatikan.', 'success');
+            insertEvent('CONTROL', 'INFO', state.power ? `Mode ${state.mode} diaktifkan (${state.fanSpeed}%).` : 'Sistem purifier dimatikan.');
+        }
+
+        async function insertEvent(eventType, severity, message) {
+            if (!supabaseClient) return;
+            const { error } = await supabaseClient.from('system_events').insert({
+                device_id:state.deviceId,
+                event_type:eventType,
+                severity:severity,
+                message:message,
+                created_at:new Date().toISOString()
+            });
+            if (error) console.warn('insert event:', error.message);
+        }
+
+        function autoFanDecision() {
+            const pm = state.telemetry.pm25;
+            if (!Number.isFinite(pm)) return 30;
+            if (pm >= state.settings.pm25_danger) return 100;
+            if (pm >= state.settings.pm25_warning) return 65;
+            return 30;
+        }
+
+        function updateAutoReason() {
+            const pm = state.telemetry.pm25;
+            const decision = autoFanDecision();
+            let title='Menunggu data PM2.5';
+            let detail='Sistem akan menentukan kecepatan kipas berdasarkan threshold Supabase.';
+            if (Number.isFinite(pm)) {
+                if (pm >= state.settings.pm25_danger) { title='PM2.5 berada pada kondisi bahaya'; detail=`${pm.toFixed(1)} µg/m³ ≥ ${state.settings.pm25_danger}. Rekomendasi kipas ${decision}%.`; }
+                else if (pm >= state.settings.pm25_warning) { title='PM2.5 perlu perhatian'; detail=`${pm.toFixed(1)} µg/m³ ≥ ${state.settings.pm25_warning}. Rekomendasi kipas ${decision}%.`; }
+                else { title='Kualitas PM2.5 relatif baik'; detail=`${pm.toFixed(1)} µg/m³ < ${state.settings.pm25_warning}. Rekomendasi kipas ${decision}%.`; }
+            }
+            setText('auto-reason-title', title);
+            setText('auto-reason-detail', detail);
+            setText('auto-reason-mini', Number.isFinite(pm) ? `PM2.5 → ${decision}%` : '--');
+        }
+
+        function checkAlerts(reading) {
+            const checks = [
+                { key:'pm25', label:'PM2.5', value:reading.pm25, warn:state.settings.pm25_warning, danger:state.settings.pm25_danger, unit:'µg/m³' },
+                { key:'aqi', label:'AQI', value:reading.aqi, warn:state.settings.aqi_warning, danger:state.settings.aqi_danger, unit:'' },
+                { key:'gas', label:'Gas', value:reading.gas, warn:state.settings.gas_warning, danger:state.settings.gas_danger, unit:' PPM' }
+            ];
+            checks.forEach(c => {
+                if (!Number.isFinite(c.value)) return;
+                let sev = 'NORMAL';
+                if (c.value >= c.danger) sev = 'DANGER';
+                else if (c.value >= c.warn) sev = 'WARNING';
+                if (sev !== autoAlertState[c.key]) {
+                    autoAlertState[c.key] = sev;
+                    if (sev === 'DANGER') {
+                        const msg = `${c.label} mencapai ${c.value.toFixed(1)}${c.unit}, melewati batas bahaya ${c.danger}${c.unit}.`;
+                        showToast(msg, 'warning', 6000);
+                        insertEvent('ALERT', 'DANGER', msg);
+                    } else if (sev === 'WARNING') {
+                        const msg = `${c.label} mencapai ${c.value.toFixed(1)}${c.unit}, melewati batas peringatan ${c.warn}${c.unit}.`;
+                        showToast(msg, 'warning', 5000);
+                        insertEvent('ALERT', 'WARNING', msg);
+                    }
+                }
+            });
+        }
+
+        function evaluate(key, value) {
+            if (!Number.isFinite(value)) return {label:'Belum ada data',className:'status-neutral'};
+            const s = state.settings;
+            if (key==='aqi') return value >= s.aqi_danger ? {label:'Bahaya',className:'status-danger'} : value >= s.aqi_warning ? {label:'Waspada',className:'status-warning'} : {label:'Baik',className:'status-good'};
+            if (key==='pm25') return value >= s.pm25_danger ? {label:'Bahaya',className:'status-danger'} : value >= s.pm25_warning ? {label:'Waspada',className:'status-warning'} : {label:'Aman',className:'status-good'};
+            if (key==='gas') return value >= s.gas_danger ? {label:'Bahaya',className:'status-danger'} : value >= s.gas_warning ? {label:'Waspada',className:'status-warning'} : {label:'Normal',className:'status-good'};
+            if (key==='temp') return value < s.temp_min ? {label:'Terlalu rendah',className:'text-blue-600'} : value > s.temp_max ? {label:'Terlalu tinggi',className:'status-danger'} : {label:'Normal',className:'status-good'};
+            if (key==='humid') return value < s.humidity_min ? {label:'Terlalu kering',className:'status-warning'} : value > s.humidity_max ? {label:'Terlalu lembap',className:'status-warning'} : {label:'Normal',className:'status-good'};
+            return {label:'Normal',className:'status-good'};
+        }
+
+        function calculateScore() {
+            const values = [];
+            const pm = state.telemetry.pm25, aqi = state.telemetry.aqi, gas = state.telemetry.gas;
+            if (Number.isFinite(pm)) values.push(clamp(100 - (pm / state.settings.pm25_danger) * 100, 0, 100));
+            if (Number.isFinite(aqi)) values.push(clamp(100 - (aqi / state.settings.aqi_danger) * 100, 0, 100));
+            if (Number.isFinite(gas)) values.push(clamp(100 - (gas / state.settings.gas_danger) * 100, 0, 100));
+            if (!values.length) return null;
+            return Math.round(values.reduce((a,b)=>a+b,0)/values.length);
+        }
+
+        function updateScore() {
+            const score = calculateScore();
+            const valEl = document.getElementById('score-value');
+            const statusEl = document.getElementById('score-status');
+            const descEl = document.getElementById('score-description');
+            const gauge = document.getElementById('score-gauge');
+            if (score == null) {
+                setText('score-value','--'); setText('score-status','Belum tersedia'); setText('score-description','Skor dihitung dari sensor kualitas udara.');
+                if (gauge) gauge.style.strokeDashoffset = 320.44;
+                return;
+            }
+            setText('score-value', score);
+            const status = score >= 80 ? {label:'BAIK',cls:'status-good',color:'#059669'} : score >= 50 ? {label:'WASPADA',cls:'status-warning',color:'#d97706'} : {label:'BURUK',cls:'status-danger',color:'#dc2626'};
+            statusEl.textContent = status.label; statusEl.className = `mt-1 text-sm font-extrabold ${status.cls}`;
+            descEl.textContent = score >= 80 ? 'Kualitas udara secara umum berada pada kondisi baik.' : score >= 50 ? 'Beberapa parameter mulai membutuhkan perhatian.' : 'Parameter kualitas udara memerlukan tindakan.';
+            if (gauge) { gauge.style.stroke = status.color; gauge.style.strokeDashoffset = 320.44 - (320.44 * score / 100); }
+        }
+
+        function toggleMiniChart(metric) {
+            document.getElementById(`mini-container-${metric}`)?.classList.toggle('hidden');
+        }
+
+        async function saveSettings() {
+            if (!supabaseClient) { showToast('Supabase belum dikonfigurasi.', 'warning'); return; }
+            const get = id => Number(document.getElementById(id).value);
+            const row = {
+                device_id: state.deviceId,
+                pm25_warning:get('set-pm25-warning'), pm25_danger:get('set-pm25-danger'),
+                aqi_warning:get('set-aqi-warning'), aqi_danger:get('set-aqi-danger'),
+                gas_warning:get('set-gas-warning'), gas_danger:get('set-gas-danger'),
+                temp_min:get('set-temp-min'), temp_max:get('set-temp-max'),
+                humidity_min:get('set-humid-min'), humidity_max:get('set-humid-max'),
+                updated_at:new Date().toISOString()
+            };
+            if (Object.values(row).some((v,i)=>i>0 && typeof v==='number' && !Number.isFinite(v))) { showToast('Periksa nilai threshold.', 'warning'); return; }
+            const { error } = await supabaseClient.from('device_settings').upsert(row, { onConflict:'device_id' });
+            if (error) { console.error(error); showToast('Pengaturan gagal disimpan.', 'warning'); return; }
+            applySettings(row);
+            closeSettings();
+            showToast('Pengaturan berhasil disimpan.', 'success');
+            insertEvent('SETTINGS','INFO','Threshold perangkat diperbarui.');
+        }
+
+        function openSettings() {
+            fillSettingsForm();
+            const modal = document.getElementById('settings-modal');
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+        }
+
+        function closeSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.add('hidden'); modal.classList.remove('flex');
+        }
+
+        function fillSettingsForm() {
+            const map = {
+                'set-pm25-warning':'pm25_warning','set-pm25-danger':'pm25_danger','set-aqi-warning':'aqi_warning','set-aqi-danger':'aqi_danger','set-gas-warning':'gas_warning','set-gas-danger':'gas_danger','set-temp-min':'temp_min','set-temp-max':'temp_max','set-humid-min':'humidity_min','set-humid-max':'humidity_max'
+            };
+            Object.entries(map).forEach(([id,key]) => { const el=document.getElementById(id); if(el) el.value=state.settings[key]; });
+            const device = document.getElementById('settings-device-id'); if(device) device.value = state.deviceId;
+        }
+
+        function switchTab(tab) {
+            ['kendali','monitoring','history'].forEach(t => document.getElementById(`tab-${t}`)?.classList.add('hidden'));
+            document.getElementById(`tab-${tab}`)?.classList.remove('hidden');
+            ['kendali','monitoring','history'].forEach(t => {
+                const btn = document.getElementById(`nav-${t}`);
+                if (!btn) return;
+                const active = t===tab;
+                btn.className = `px-4 py-2.5 rounded-xl ${active ? 'bg-earth-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700'} text-xs font-extrabold flex items-center gap-2`;
+            });
+            if (tab === 'monitoring') setTimeout(()=>{ chartInstance?.resize(); triggerReveal(); },100);
+            if (tab === 'history') { renderHistoryTable(); renderEvents(); }
+        }
+
+        async function toggleFullscreen() {
+            const el = document.getElementById('fullscreen-main');
+            try {
+                if (!document.fullscreenElement) await el.requestFullscreen();
+                else await document.exitFullscreen();
+            } catch (e) { showToast('Fullscreen tidak tersedia di browser ini.', 'warning'); }
+        }
+
+        function updateFullscreenIcon() {
+            // Tidak perlu state tambahan; browser menangani fullscreen.
+        }
+
+        function toggleDarkMode() {
+            state.darkMode = !state.darkMode;
+            localStorage.setItem('atmoscare-dark', state.darkMode ? '1':'0');
+            applyDarkMode();
+            if (chartInstance) { updateChartTheme(); chartInstance.update(); }
+        }
+
+        function applyDarkMode() {
+            document.documentElement.classList.toggle('dark', state.darkMode);
+            const icon = document.getElementById('theme-icon');
+            if (icon) { icon.classList.toggle('fa-moon', !state.darkMode); icon.classList.toggle('fa-sun', state.darkMode); }
+            updateChartTheme();
+        }
+
+        function updateChartTheme() {
+            if (!chartInstance) return;
+            const dark = document.documentElement.classList.contains('dark');
+            chartInstance.options.scales.y.grid.color = dark ? 'rgba(255,255,255,.06)' : '#eef2f7';
+            chartInstance.options.scales.y.ticks.color = dark ? '#94a3b8' : '#94a3b8';
+            chartInstance.options.scales.x.ticks.color = dark ? '#94a3b8' : '#94a3b8';
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const local = now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            setText('local-clock', local);
+        }
+
+        function updateDeviceIdUI() {
+            setText('device-id-label', state.deviceId);
+            const settingDevice = document.getElementById('settings-device-id');
+            if (settingDevice) settingDevice.value = state.deviceId;
+        }
+
+        function setupReveal() {
+            revealObserver = new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('active'); }), { threshold:.08 });
+            document.querySelectorAll('.reveal').forEach(el=>revealObserver.observe(el));
+        }
+        function triggerReveal() { document.querySelectorAll('.reveal').forEach((el,i)=>setTimeout(()=>el.classList.add('active'),Math.min(i*35,350))); }
+
+        function initAirflowCanvas() {
+            const canvas = document.getElementById('airflow-canvas');
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+            function resize() {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                canvas.width = rect.width*dpr; canvas.height = rect.height*dpr; canvas.style.width=rect.width+'px'; canvas.style.height=rect.height+'px';
+                ctx.setTransform(dpr,0,0,dpr,0,0);
+                if (!particles.length) particles = Array.from({length:65},()=>({x:Math.random()*rect.width,y:Math.random()*rect.height,r:Math.random()*2.5+0.8,s:Math.random()+.4,o:Math.random()*.5+.08}));
+            }
+            resize(); window.addEventListener('resize', resize);
+            function draw() {
+                const w = canvas.clientWidth, h = canvas.clientHeight;
+                ctx.clearRect(0,0,w,h);
+                const powerFactor = state.power ? (0.35 + state.fanSpeed/45) : 0.04;
+                const qualityFactor = Number.isFinite(state.telemetry.pm25) ? clamp(state.telemetry.pm25 / Math.max(state.settings.pm25_danger,1),0,1) : .25;
+                const color = document.documentElement.classList.contains('dark') ? '255,255,255' : '109,134,106';
+                particles.forEach(p=>{
+                    const alpha = Math.min(.75, p.o * (state.power ? 1+qualityFactor : .2));
+                    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle=`rgba(${color},${alpha})`; ctx.fill();
+                    p.y -= p.s * powerFactor * 2.4;
+                    p.x += Math.sin((p.y+p.x)/80)*0.18*powerFactor;
+                    if (p.y+p.r<0) { p.y=h+p.r; p.x=Math.random()*w; }
+                    if (p.x<0) p.x=w; if (p.x>w) p.x=0;
+                });
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+
+        function showToast(message, type='info', duration=3000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const icon = type==='success' ? 'fa-circle-check text-emerald-500' : type==='warning' ? 'fa-triangle-exclamation text-amber-500' : 'fa-circle-info text-blue-500';
+            toast.className='glass rounded-2xl shadow-xl px-4 py-3 flex items-start gap-3 text-xs font-bold opacity-0 translate-y-2 transition-all pointer-events-auto';
+            toast.innerHTML=`<i class="fa-solid ${icon} mt-0.5"></i><span class="text-slate-700 dark:text-slate-100 max-w-[70vw]">${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            requestAnimationFrame(()=>toast.classList.remove('opacity-0','translate-y-2'));
+            setTimeout(()=>{toast.classList.add('opacity-0','translate-y-2');setTimeout(()=>toast.remove(),350)},duration);
+        }
+
+        function exportCSV() {
+            if (!state.history.length) { showToast('Tidak ada data untuk diekspor.', 'warning'); return; }
+            const rows = [['timestamp','device_id','aqi','pm25','gas_ppm','temperature_c','humidity_pct']];
+            state.history.forEach(r=>rows.push([r.recorded_at,r.device_id,r.aqi,r.pm25,r.gas,r.temp,r.humid]));
+            const csv = rows.map(row=>row.map(csvEscape).join(',')).join('\n');
+            downloadBlob(csv,'atmoscare-sensor.csv','text/csv;charset=utf-8');
+        }
+
+        function exportJSON() {
+            if (!state.history.length) { showToast('Tidak ada data untuk diekspor.', 'warning'); return; }
+            downloadBlob(JSON.stringify(state.history,null,2),'atmoscare-sensor.json','application/json;charset=utf-8');
+        }
+
+        function downloadBlob(content, filename, type) {
+            const blob = new Blob([content],{type});
+            const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+        }
+
+        function csvEscape(value) { const s=String(value ?? ''); return `"${s.replaceAll('"','""')}"`; }
+        function setText(id,value) { const el=document.getElementById(id); if(el) el.textContent=value; }
+        function numOr(v,fallback) { const n=Number(v); return Number.isFinite(n) ? n : fallback; }
+        function numOrNull(v) { const n=Number(v); return v===null || v===undefined || v==='' || !Number.isFinite(n) ? null : n; }
+        function clamp(v,min,max) { return Math.min(max,Math.max(min,v)); }
+        function formatValue(v,decimals=1) { return Number.isFinite(v) ? Number(v).toFixed(decimals).replace(/\.0+$/,'') : '--'; }
+        function formatDateTime(iso) {
+            if(!iso) return {time:'--',full:'--'};
+            const d=new Date(iso);
+            if(Number.isNaN(d.getTime())) return {time:'--',full:'--'};
+            return { time:d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}), full:d.toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}) };
+        }
+        function escapeHtml(v) { return String(v ?? '').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
+
+        // Tutup modal saat klik backdrop.
+        document.getElementById('settings-modal')?.addEventListener('click', e => { if(e.target.id==='settings-modal') closeSettings(); });
+        document.addEventListener('keydown', e => { if(e.key==='Escape') closeSettings(); });
+    </script>
+</body>
+</html>
